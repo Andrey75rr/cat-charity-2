@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -6,14 +8,11 @@ from app.models.charity_project import CharityProject
 
 
 class CRUDCharityProject(CRUDBase):
-    """CRUD для операций с проектами"""
-
     async def get_by_name(
         self,
         name: str,
         session: AsyncSession,
     ):
-        """Получить проект по имени"""
         result = await session.execute(
             select(CharityProject).where(CharityProject.name == name)
         )
@@ -23,13 +22,32 @@ class CRUDCharityProject(CRUDBase):
         self,
         session: AsyncSession,
     ):
-        """Получить открытые проекты (не полностью инвестированные)"""
         result = await session.execute(
             select(CharityProject).where(
                 CharityProject.fully_invested.is_(False)
             ).order_by(CharityProject.create_date)
         )
         return result.scalars().all()
+
+    async def update_project(
+        self,
+        project: CharityProject,
+        update_data: dict,
+        session: AsyncSession,
+    ) -> CharityProject:
+        if "full_amount" in update_data:
+            project.full_amount = update_data.pop("full_amount")
+            if project.invested_amount >= project.full_amount:
+                project.fully_invested = True
+                project.close_date = datetime.now()
+
+        for key, value in update_data.items():
+            setattr(project, key, value)
+
+        session.add(project)
+        await session.commit()
+        await session.refresh(project)
+        return project
 
 
 charity_project_crud = CRUDCharityProject(CharityProject)
